@@ -110,7 +110,6 @@ function DroppableColumn({
                         className="input-field mb-3 min-h-20 resize-none"
                     />
 
-                    {/* Parent Task Selection */}
                     <div className="mb-3">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             Parent Task (optional)

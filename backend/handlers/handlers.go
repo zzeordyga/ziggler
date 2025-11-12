@@ -284,8 +284,8 @@ func GetTasks(c *gin.Context) {
 	var tasks []Task
 	var total int64
 
-	query := database.DB.Preload("Creator").Preload("Assignee").Preload("Subtasks")
-	countQuery := database.DB.Model(&Task{})
+	query := database.DB.Preload("Creator").Preload("Assignee").Preload("Subtasks").Where("deleted_at IS NULL")
+	countQuery := database.DB.Model(&Task{}).Where("deleted_at IS NULL")
 
 	myTasksOnly := c.Query("my_tasks") == "true"
 	if myTasksOnly {
@@ -328,7 +328,7 @@ func GetTask(c *gin.Context) {
 	}
 
 	var task Task
-	if err := database.DB.Preload("Creator").Preload("Assignee").Preload("Subtasks").First(&task, uint(id)).Error; err != nil {
+	if err := database.DB.Preload("Creator").Preload("Assignee").Preload("Subtasks").Where("deleted_at IS NULL").First(&task, uint(id)).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
