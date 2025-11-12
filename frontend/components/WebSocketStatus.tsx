@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createSocketIOConnection } from '@/lib/api'
+import { createWebSocketConnection } from '@/lib/api'
 import { WSMessage } from '@/types'
 
 interface WebSocketStatusProps {
@@ -16,39 +16,31 @@ export default function WebSocketStatus({ className = '' }: WebSocketStatusProps
         const token = localStorage.getItem('token')
         if (!token) return
 
-        const socket = createSocketIOConnection(token)
+        const ws = createWebSocketConnection(token)
 
-        socket.on('connect', () => {
+        ws.addEventListener('open', () => {
             setIsConnected(true)
         })
 
-        socket.on('disconnect', () => {
+        ws.addEventListener('close', () => {
             setIsConnected(false)
         })
 
-        socket.on('connect_error', () => {
+        ws.addEventListener('error', () => {
             setIsConnected(false)
         })
 
-        // Listen for task events
-        socket.on('task_created', (message) => {
-            setLastMessage({ type: 'task_created', payload: message.payload })
-        })
-
-        socket.on('task_updated', (message) => {
-            setLastMessage({ type: 'task_updated', payload: message.payload })
-        })
-
-        socket.on('task_deleted', (message) => {
-            setLastMessage({ type: 'task_deleted', payload: message.payload })
-        })
-
-        socket.on('task_assigned', (message) => {
-            setLastMessage({ type: 'task_created', payload: message.payload })
+        ws.addEventListener('message', (event) => {
+            try {
+                const data = JSON.parse(event.data)
+                setLastMessage(data)
+            } catch (error) {
+                console.error('Failed to parse WebSocket message:', error)
+            }
         })
 
         return () => {
-            socket.disconnect()
+            ws.close()
         }
     }, [])
 

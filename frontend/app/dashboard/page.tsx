@@ -20,6 +20,8 @@ import {
 import { Task, User, TaskStatus, StatusColumns, TASK_STATUSES } from '@/types'
 import { getStatusDisplayName, getStatusColor } from '@/utils/tasks'
 import { useTasks, useCreateTask, useUpdateTaskStatus } from '@/hooks/useTasks'
+import { createWebSocketConnection } from '@/lib/api'
+import { useQueryClient } from '@tanstack/react-query'
 import TaskCard from '@/components/TaskCard'
 import SearchFilter from '@/components/SearchFilter'
 import WebSocketStatus from '@/components/WebSocketStatus'
@@ -209,6 +211,7 @@ export default function DashboardPage() {
     const { data: tasks = [], isLoading, error } = useTasks({ myTasksOnly: viewFilter === 'assigned' })
     const createTaskMutation = useCreateTask()
     const updateTaskStatusMutation = useUpdateTaskStatus()
+    const queryClient = useQueryClient()
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -226,6 +229,32 @@ export default function DashboardPage() {
             router.push('/login')
         }
     }, [router])
+
+    // WebSocket connection for real-time updates
+    useEffect(() => {
+        const token = localStorage.getItem('token')
+        if (!token) return
+
+        const ws = createWebSocketConnection(token)
+
+        ws.addEventListener('message', (event) => {
+            try {
+                const data = JSON.parse(event.data)
+
+                // Handle real-time task updates
+                if (data.type === 'task_created' || data.type === 'task_updated' || data.type === 'task_deleted') {
+                    // Invalidate and refetch tasks
+                    queryClient.invalidateQueries({ queryKey: ['tasks'] })
+                }
+            } catch (error) {
+                console.error('Failed to parse WebSocket message:', error)
+            }
+        })
+
+        return () => {
+            ws.close()
+        }
+    }, [queryClient])
 
     const createTask = async (status: string) => {
         if (!newTaskTitle.trim()) return

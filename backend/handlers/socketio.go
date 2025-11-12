@@ -2,76 +2,51 @@ package handlers
 
 import (
 	"log"
+	"net/http"
 	"strconv"
+	"sync"
 
 	"ziggler_backend/auth"
 
 	"github.com/gin-gonic/gin"
-	socketio "github.com/googollee/go-socket.io"
+	"github.com/gorilla/websocket"
 )
 
-var SocketServer *socketio.Server
+var (
+	upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // Allow all origins
+		},
+	}
+	clients   = make(map[*websocket.Conn]bool)
+	clientsMu sync.Mutex
+	broadcast = make(chan WSMessage, 100)
+)
+
+type WSMessage struct {
+	Type    string      `json:"type"`
+	Payload interface{} `json:"payload"`
+}
 
 func InitSocketIO() {
-	server := socketio.NewServer(nil)
+	go handleBroadcast()
+	log.Printf("WebSocket server initialized")
+}
 
-	server.OnConnect("/", func(s socketio.Conn) error {
-		log.Printf("Socket.IO client connected: %s", s.ID())
-		return nil
-	})
-
-	server.OnEvent("/", "authenticate", func(s socketio.Conn, token string) {
-
-		claims, err := auth.ValidateToken(token)
-		if err != nil {
-			log.Printf("Authentication failed for socket %s: %v", s.ID(), err)
-			s.Emit("auth_error", "Invalid token")
-			s.Close()
-			return
+func handleBroadcast() {
+	for {
+		msg := <-broadcast
+		clientsMu.Lock()
+		for client := range clients {
+			err := client.WriteJSON(msg)
+			if err != nil {
+				log.Printf("WebSocket write error: %v", err)
+				client.Close()
+				delete(clients, client)
+			}
 		}
-
-		s.SetContext(map[string]interface{}{
-			"user_id": claims.UserID,
-			"email":   claims.Email,
-		})
-
-		log.Printf("Socket %s authenticated for user %d", s.ID(), claims.UserID)
-		s.Emit("authenticated", map[string]interface{}{
-			"user_id": claims.UserID,
-			"message": "Successfully authenticated",
-		})
-
-		s.Join(getUserRoom(claims.UserID))
-	})
-
-	server.OnEvent("/", "join_task", func(s socketio.Conn, taskID string) {
-
-		s.Join(getTaskRoom(taskID))
-		log.Printf("Socket %s joined task room: %s", s.ID(), taskID)
-	})
-
-	server.OnEvent("/", "leave_task", func(s socketio.Conn, taskID string) {
-
-		s.Leave(getTaskRoom(taskID))
-		log.Printf("Socket %s left task room: %s", s.ID(), taskID)
-	})
-
-	server.OnDisconnect("/", func(s socketio.Conn, reason string) {
-		log.Printf("Socket.IO client disconnected: %s, reason: %s", s.ID(), reason)
-	})
-
-	server.OnError("/", func(s socketio.Conn, e error) {
-		log.Printf("Socket.IO error: %v", e)
-	})
-
-	go func() {
-		if err := server.Serve(); err != nil {
-			log.Fatalf("Socket.IO serve error: %v", err)
-		}
-	}()
-
-	SocketServer = server
-	log.Printf("Socket.IO server initialized and serving")
+		clientsMu.Unlock()
+	}
 }
 
 func getUserRoom(userID int) string {
@@ -82,106 +57,97 @@ func getTaskRoom(taskID string) string {
 	return "task_" + taskID
 }
 
-func SocketIOMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		log.Printf("Socket.IO request: %s %s", c.Request.Method, c.Request.URL.Path)
+func WebSocketHandler(c *gin.Context) {
+	// Upgrade HTTP connection to WebSocket
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade error: %v", err)
+		return
+	}
+	defer conn.Close()
 
-		if SocketServer == nil {
-			log.Printf("ERROR: Socket.IO server is nil!")
-			c.JSON(500, gin.H{"error": "Socket.IO server not initialized"})
-			return
+	// Register client
+	clientsMu.Lock()
+	clients[conn] = true
+	clientsMu.Unlock()
+
+	log.Printf("WebSocket client connected from %s", c.Request.RemoteAddr)
+
+	// Send welcome message
+	conn.WriteJSON(WSMessage{
+		Type: "connected",
+		Payload: map[string]interface{}{
+			"message": "Connected to WebSocket server",
+		},
+	})
+
+	// Listen for messages from this client
+	for {
+		var msg map[string]interface{}
+		err := conn.ReadJSON(&msg)
+		if err != nil {
+			log.Printf("WebSocket read error: %v", err)
+			break
 		}
 
-		SocketServer.ServeHTTP(c.Writer, c.Request)
+		// Handle authentication
+		if msgType, ok := msg["type"].(string); ok && msgType == "authenticate" {
+			if token, ok := msg["token"].(string); ok {
+				claims, err := auth.ValidateToken(token)
+				if err != nil {
+					conn.WriteJSON(WSMessage{
+						Type:    "auth_error",
+						Payload: "Invalid token",
+					})
+					break
+				}
+
+				log.Printf("WebSocket client authenticated: user %d", claims.UserID)
+				conn.WriteJSON(WSMessage{
+					Type: "authenticated",
+					Payload: map[string]interface{}{
+						"user_id": claims.UserID,
+						"message": "Successfully authenticated",
+					},
+				})
+			}
+		}
 	}
+
+	// Unregister client
+	clientsMu.Lock()
+	delete(clients, conn)
+	clientsMu.Unlock()
+	log.Printf("WebSocket client disconnected")
+}
+
+func SocketIOMiddleware() gin.HandlerFunc {
+	return WebSocketHandler
 }
 
 func HandleSocketIO(c *gin.Context) {
-	log.Printf("Socket.IO request received: %s %s %s", c.Request.Method, c.Request.URL.Path, c.Request.URL.RawQuery)
-
-	origin := c.Request.Header.Get("Origin")
-	if origin == "" {
-		origin = "http://localhost:3000"
-	}
-
-	c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With")
-	c.Writer.Header().Set("Access-Control-Max-Age", "86400")
-
-	if c.Request.Method == "OPTIONS" {
-		c.Status(200)
-		return
-	}
-
-	if SocketServer == nil {
-		log.Printf("Socket.IO server is nil!")
-		c.JSON(500, gin.H{"error": "Socket.IO server not initialized"})
-		return
-	}
-
-	SocketServer.ServeHTTP(c.Writer, c.Request)
+	WebSocketHandler(c)
 }
 
 func BroadcastTaskCreated(task Task) {
-	if SocketServer == nil {
-		return
-	}
-
-	message := map[string]interface{}{
-		"type":    "task_created",
-		"payload": task,
-	}
-
-	SocketServer.BroadcastToNamespace("/", "task_created", message)
-
-	if task.AssigneeID != nil {
-		userRoom := getUserRoom(int(*task.AssigneeID))
-		SocketServer.BroadcastToRoom("/", userRoom, "task_assigned", message)
+	broadcast <- WSMessage{
+		Type:    "task_created",
+		Payload: task,
 	}
 }
 
 func BroadcastTaskUpdated(task Task) {
-	if SocketServer == nil {
-		return
-	}
-
-	message := map[string]interface{}{
-		"type":    "task_updated",
-		"payload": task,
-	}
-
-	SocketServer.BroadcastToNamespace("/", "task_updated", message)
-
-	taskRoom := getTaskRoom(strconv.Itoa(int(task.ID)))
-	SocketServer.BroadcastToRoom("/", taskRoom, "task_updated", message)
-
-	if task.AssigneeID != nil {
-		userRoom := getUserRoom(int(*task.AssigneeID))
-		SocketServer.BroadcastToRoom("/", userRoom, "task_updated", message)
+	broadcast <- WSMessage{
+		Type:    "task_updated",
+		Payload: task,
 	}
 }
 
 func BroadcastTaskDeleted(taskID uint, assigneeID *uint) {
-	if SocketServer == nil {
-		return
-	}
-
-	message := map[string]interface{}{
-		"type": "task_deleted",
-		"payload": map[string]interface{}{
+	broadcast <- WSMessage{
+		Type: "task_deleted",
+		Payload: map[string]interface{}{
 			"id": taskID,
 		},
-	}
-
-	SocketServer.BroadcastToNamespace("/", "task_deleted", message)
-
-	taskRoom := getTaskRoom(strconv.Itoa(int(taskID)))
-	SocketServer.BroadcastToRoom("/", taskRoom, "task_deleted", message)
-
-	if assigneeID != nil {
-		userRoom := getUserRoom(int(*assigneeID))
-		SocketServer.BroadcastToRoom("/", userRoom, "task_deleted", message)
 	}
 }

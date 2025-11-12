@@ -22,6 +22,8 @@ func main() {
 
 	r := gin.Default()
 
+	r.GET("/api/v1/ws", handlers.WebSocketHandler)
+
 	r.Use(middleware.CorsMiddleware())
 
 	api := r.Group("/api/v1")
@@ -30,8 +32,6 @@ func main() {
 
 	api.POST("/auth/register", handlers.Register)
 	api.POST("/auth/login", handlers.Login)
-
-	api.Any("/socket.io/*any", handlers.SocketIOMiddleware())
 
 	protected := api.Group("/")
 	protected.Use(middleware.JWTAuthMiddleware())

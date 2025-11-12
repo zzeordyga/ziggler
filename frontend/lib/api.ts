@@ -1,9 +1,9 @@
 import axios, { AxiosResponse, AxiosError } from 'axios'
-import { io, Socket } from 'socket.io-client'
 import { Task, User, LoginResponse, RegisterResponse, LoginFormData, RegisterFormData, TasksResponse, StatsResponse } from '@/types'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 const API_FULL_URL = `${API_BASE_URL}/api/v1`
+const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080'
 
 const apiClient = axios.create({
   baseURL: API_FULL_URL,
@@ -44,55 +44,43 @@ apiClient.interceptors.response.use(
 
 export { apiClient }
 
-export const createSocketIOConnection = (token: string): Socket => {
-  const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8080'
-  const socket = io(WS_BASE_URL, {
-    path: '/api/v1/socket.io/',
-    transports: ['websocket', 'polling'],
-    upgrade: true,
-    auth: {
-      token: token
-    },
-    autoConnect: true,
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionAttempts: 5,
-    timeout: 20000,
-    forceNew: false
-  })
+export const createWebSocketConnection = (token: string): WebSocket => {
+  const ws = new WebSocket(`${WS_BASE_URL}/api/v1/ws`)
   
-  socket.on('connect', () => {
-    console.log('Socket.IO connected')
+  ws.onopen = () => {
+    console.log('WebSocket connected')
     // Authenticate after connection
-    socket.emit('authenticate', token)
-  })
+    ws.send(JSON.stringify({
+      type: 'authenticate',
+      token: token
+    }))
+  }
   
-  socket.on('authenticated', (data) => {
-    console.log('Socket.IO authenticated:', data)
-  })
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data)
+      console.log('WebSocket message:', data)
+      
+      if (data.type === 'authenticated') {
+        console.log('WebSocket authenticated:', data.payload)
+      } else if (data.type === 'auth_error') {
+        console.error('WebSocket authentication error:', data.payload)
+        ws.close()
+      }
+    } catch (error) {
+      console.error('WebSocket message parse error:', error)
+    }
+  }
   
-  socket.on('auth_error', (error) => {
-    console.error('Socket.IO authentication error:', error)
-  })
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error)
+  }
   
-  socket.on('disconnect', (reason) => {
-    console.log('Socket.IO disconnected:', reason)
-  })
+  ws.onclose = () => {
+    console.log('WebSocket disconnected')
+  }
   
-  socket.on('connect_error', (error: Error) => {
-    console.error('Socket.IO connection error:', error)
-    console.error('Error message:', error.message)
-  })
-  
-  socket.on('reconnect_error', (error) => {
-    console.error('Socket.IO reconnection error:', error)
-  })
-  
-  socket.on('error', (error) => {
-    console.error('Socket.IO generic error:', error)
-  })
-  
-  return socket
+  return ws
 }
 
 export const authAPI = {
