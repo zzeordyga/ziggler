@@ -46,6 +46,8 @@ export { apiClient }
 export const createSocketIOConnection = (token: string): Socket => {
   const socket = io('http://localhost:8080', {
     path: '/api/v1/socket.io/',
+    transports: ['websocket', 'polling'],
+    upgrade: true,
     auth: {
       token: token
     },
@@ -53,7 +55,8 @@ export const createSocketIOConnection = (token: string): Socket => {
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionAttempts: 5,
-    timeout: 20000
+    timeout: 20000,
+    forceNew: false
   })
   
   socket.on('connect', () => {
@@ -74,8 +77,17 @@ export const createSocketIOConnection = (token: string): Socket => {
     console.log('Socket.IO disconnected:', reason)
   })
   
-  socket.on('connect_error', (error) => {
+  socket.on('connect_error', (error: Error) => {
     console.error('Socket.IO connection error:', error)
+    console.error('Error message:', error.message)
+  })
+  
+  socket.on('reconnect_error', (error) => {
+    console.error('Socket.IO reconnection error:', error)
+  })
+  
+  socket.on('error', (error) => {
+    console.error('Socket.IO generic error:', error)
   })
   
   return socket

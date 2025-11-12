@@ -31,15 +31,13 @@ func main() {
 	api.POST("/auth/register", handlers.Register)
 	api.POST("/auth/login", handlers.Login)
 
+	api.Any("/socket.io/*any", handlers.SocketIOMiddleware())
+
 	protected := api.Group("/")
 	protected.Use(middleware.JWTAuthMiddleware())
 	{
 
 		protected.GET("/profile", handlers.GetProfile)
-
-		// Socket.IO endpoint
-		protected.GET("/socket.io/*any", handlers.HandleSocketIO)
-		protected.POST("/socket.io/*any", handlers.HandleSocketIO)
 
 		protected.GET("/tasks", handlers.GetTasks)
 		protected.POST("/tasks", handlers.CreateTask)

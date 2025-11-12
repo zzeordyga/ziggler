@@ -16,7 +16,6 @@ func InitSocketIO() {
 	server := socketio.NewServer(nil)
 
 	server.OnConnect("/", func(s socketio.Conn) error {
-		s.SetContext("")
 		log.Printf("Socket.IO client connected: %s", s.ID())
 		return nil
 	})
@@ -66,6 +65,7 @@ func InitSocketIO() {
 	})
 
 	SocketServer = server
+	log.Printf("Socket.IO server initialized successfully")
 }
 
 func getUserRoom(userID int) string {
@@ -81,6 +81,30 @@ func SocketIOMiddleware() gin.HandlerFunc {
 }
 
 func HandleSocketIO(c *gin.Context) {
+	log.Printf("Socket.IO request received: %s %s %s", c.Request.Method, c.Request.URL.Path, c.Request.URL.RawQuery)
+
+	origin := c.Request.Header.Get("Origin")
+	if origin == "" {
+		origin = "http://localhost:3000"
+	}
+
+	c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With")
+	c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+
+	if c.Request.Method == "OPTIONS" {
+		c.Status(200)
+		return
+	}
+
+	if SocketServer == nil {
+		log.Printf("Socket.IO server is nil!")
+		c.JSON(500, gin.H{"error": "Socket.IO server not initialized"})
+		return
+	}
+
 	SocketServer.ServeHTTP(c.Writer, c.Request)
 }
 
