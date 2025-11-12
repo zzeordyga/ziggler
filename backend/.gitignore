@@ -3,6 +3,7 @@
 *.linux
 *.windows
 ziggler-backend
+ziggler_backend
 ziggler-backend.exe
 
 bin/
