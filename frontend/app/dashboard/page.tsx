@@ -22,6 +22,7 @@ import { getStatusDisplayName, getStatusColor } from '@/utils/tasks'
 import { useTasks, useCreateTask, useUpdateTaskStatus } from '@/hooks/useTasks'
 import TaskCard from '@/components/TaskCard'
 import SearchFilter from '@/components/SearchFilter'
+import WebSocketStatus from '@/components/WebSocketStatus'
 
 const STATUS_COLUMNS: StatusColumns = TASK_STATUSES.reduce((acc, status) => {
     acc[status] = {
@@ -431,7 +432,7 @@ export default function DashboardPage() {
                                     Showing all tasks
                                 </>
                             )}
-                            {/* <WebSocketStatus /> */}
+                            <WebSocketStatus />
                         </div>
                     </div>
                 </div>

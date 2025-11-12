@@ -64,8 +64,14 @@ func InitSocketIO() {
 		log.Printf("Socket.IO error: %v", e)
 	})
 
+	go func() {
+		if err := server.Serve(); err != nil {
+			log.Fatalf("Socket.IO serve error: %v", err)
+		}
+	}()
+
 	SocketServer = server
-	log.Printf("Socket.IO server initialized successfully")
+	log.Printf("Socket.IO server initialized and serving")
 }
 
 func getUserRoom(userID int) string {
@@ -77,7 +83,17 @@ func getTaskRoom(taskID string) string {
 }
 
 func SocketIOMiddleware() gin.HandlerFunc {
-	return gin.WrapH(SocketServer)
+	return func(c *gin.Context) {
+		log.Printf("Socket.IO request: %s %s", c.Request.Method, c.Request.URL.Path)
+
+		if SocketServer == nil {
+			log.Printf("ERROR: Socket.IO server is nil!")
+			c.JSON(500, gin.H{"error": "Socket.IO server not initialized"})
+			return
+		}
+
+		SocketServer.ServeHTTP(c.Writer, c.Request)
+	}
 }
 
 func HandleSocketIO(c *gin.Context) {
