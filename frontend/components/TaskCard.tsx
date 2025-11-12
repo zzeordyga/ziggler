@@ -87,7 +87,8 @@ export default function TaskCard({ task }: TaskCardProps) {
         updateMutation.mutate({
             taskId: task.id,
             updates: {
-                assignee_id: userId || undefined
+                assignee_id: userId || undefined,
+                unassigned: userId === null,
             }
         })
         setShowAssignDropdown(false)
