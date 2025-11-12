@@ -376,7 +376,7 @@ export default function DashboardPage() {
                                     Showing all tasks
                                 </>
                             )}
-                            <WebSocketStatus />
+                            {/* <WebSocketStatus /> */}
                         </div>
                     </div>
                 </div>
