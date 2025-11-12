@@ -1,6 +1,6 @@
 import axios, { AxiosResponse, AxiosError } from 'axios'
 import { io, Socket } from 'socket.io-client'
-import { Task, LoginResponse, RegisterResponse, LoginFormData, RegisterFormData, TasksResponse, StatsResponse } from '@/types'
+import { Task, User, LoginResponse, RegisterResponse, LoginFormData, RegisterFormData, TasksResponse, StatsResponse } from '@/types'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 const API_FULL_URL = `${API_BASE_URL}/api/v1`
@@ -214,6 +214,23 @@ export const tasksAPI = {
         throw new Error(error.response?.data?.error || 'Failed to delete task')
       }
       throw new Error('Failed to delete task')
+    }
+  }
+}
+
+export const usersAPI = {
+  getAll: async (): Promise<User[]> => {
+    try {
+      const response = await apiClient.get<User[]>('/users')
+      return response.data
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          throw new Error('Unauthorized')
+        }
+        throw new Error(error.response?.data?.error || 'Failed to fetch users')
+      }
+      throw new Error('Failed to fetch users')
     }
   }
 }

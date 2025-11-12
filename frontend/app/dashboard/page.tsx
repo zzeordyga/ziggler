@@ -20,6 +20,7 @@ import {
 import { Task, User, TaskStatus, StatusColumns, TASK_STATUSES } from '@/types'
 import { getStatusDisplayName, getStatusColor } from '@/utils/tasks'
 import { useTasks, useCreateTask, useUpdateTaskStatus } from '@/hooks/useTasks'
+import { useUsers } from '@/hooks/useUsers'
 import TaskCard from '@/components/TaskCard'
 import SearchFilter from '@/components/SearchFilter'
 import WebSocketStatus from '@/components/WebSocketStatus'
@@ -46,7 +47,7 @@ function DroppableColumn({
     newTaskDescription,
     setNewTaskDescription,
     createTask,
-    showMyTasksOnly
+    viewFilter
 }: {
     status: string
     title: string
@@ -59,7 +60,7 @@ function DroppableColumn({
     newTaskDescription: string
     setNewTaskDescription: (description: string) => void
     createTask: (status: string) => void
-    showMyTasksOnly: boolean
+    viewFilter: 'assigned' | 'created' | 'all'
 }) {
     const { setNodeRef, isOver } = useDroppable({
         id: status,
@@ -110,7 +111,7 @@ function DroppableColumn({
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        {showMyTasksOnly ? "Task will be auto-assigned to you" : "Task will be unassigned"}
+                        {viewFilter === 'assigned' ? "Task will be auto-assigned to you" : "Task will be unassigned"}
                     </div>
 
                     <div className="flex gap-2">
@@ -175,11 +176,11 @@ export default function DashboardPage() {
     const [newTaskTitle, setNewTaskTitle] = useState('')
     const [newTaskDescription, setNewTaskDescription] = useState('')
     const [searchTerm, setSearchTerm] = useState('')
-    const [showMyTasksOnly, setShowMyTasksOnly] = useState(true) // Default to showing only assigned tasks
+    const [viewFilter, setViewFilter] = useState<'assigned' | 'created' | 'all'>('assigned')
     const router = useRouter()
 
-    // TanStack Query hooks
-    const { data: tasks = [], isLoading, error } = useTasks({ myTasksOnly: showMyTasksOnly })
+    const { data: tasks = [], isLoading, error } = useTasks({ myTasksOnly: viewFilter === 'assigned' })
+    const { data: users = [] } = useUsers()
     const createTaskMutation = useCreateTask()
     const updateTaskStatusMutation = useUpdateTaskStatus()
 
@@ -209,8 +210,7 @@ export default function DashboardPage() {
             status: status as TaskStatus,
         }
 
-        // If "My Tasks Only" is enabled, auto-assign to current user
-        if (showMyTasksOnly && user?.id) {
+        if (viewFilter === 'assigned' && user?.id) {
             taskData.assignee_id = user.id
         }
 
@@ -251,21 +251,26 @@ export default function DashboardPage() {
     }
 
     const filterTasks = (tasksToFilter: Task[]) => {
-        if (!searchTerm.trim()) return tasksToFilter
+        let filteredTasks = tasksToFilter
+
+        if (viewFilter === 'created' && user?.id) {
+            filteredTasks = filteredTasks.filter(task => task.creator_id === user.id)
+        } else if (viewFilter === 'assigned' && user?.id) {
+            filteredTasks = filteredTasks.filter(task => task.assignee_id === user.id)
+        }
+
+        if (!searchTerm.trim()) return filteredTasks
 
         const searchLower = searchTerm.toLowerCase()
-        return tasksToFilter.filter(task => {
-            // Search in title and description
+        return filteredTasks.filter(task => {
             const titleMatch = task.title.toLowerCase().includes(searchLower)
             const descriptionMatch = task.description.toLowerCase().includes(searchLower)
 
-            // Search in creator name
             const creatorMatch = task.creator && (
                 task.creator.display_name?.toLowerCase().includes(searchLower) ||
                 task.creator.username.toLowerCase().includes(searchLower)
             )
 
-            // Search in assignee name
             const assigneeMatch = task.assignee && (
                 task.assignee.display_name?.toLowerCase().includes(searchLower) ||
                 task.assignee.username.toLowerCase().includes(searchLower)
@@ -340,35 +345,55 @@ export default function DashboardPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div className="flex items-center gap-4">
                             <h3 className="text-sm font-medium text-gray-900 dark:text-white">View:</h3>
-                            <div className="flex items-center gap-2">
-                                <label className="flex items-center cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={showMyTasksOnly}
-                                        onChange={(e) => setShowMyTasksOnly(e.target.checked)}
-                                        className="sr-only"
-                                    />
-                                    <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${showMyTasksOnly ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
-                                        }`}>
-                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showMyTasksOnly ? 'translate-x-6' : 'translate-x-1'
-                                            }`} />
-                                    </div>
-                                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
-                                        My Tasks Only
-                                    </span>
-                                </label>
+                            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                                <button
+                                    onClick={() => setViewFilter('assigned')}
+                                    className={`px-3 py-1 text-xs rounded-md transition-colors ${viewFilter === 'assigned'
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600'
+                                        }`}
+                                >
+                                    Assigned to Me
+                                </button>
+                                <button
+                                    onClick={() => setViewFilter('created')}
+                                    className={`px-3 py-1 text-xs rounded-md transition-colors ${viewFilter === 'created'
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600'
+                                        }`}
+                                >
+                                    Created by Me
+                                </button>
+                                <button
+                                    onClick={() => setViewFilter('all')}
+                                    className={`px-3 py-1 text-xs rounded-md transition-colors ${viewFilter === 'all'
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600'
+                                        }`}
+                                >
+                                    All Tasks
+                                </button>
                             </div>
                         </div>
 
                         <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                            {showMyTasksOnly ? (
+                            {viewFilter === 'assigned' && (
                                 <>
                                     <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                     </svg>
                                     Showing tasks assigned to you
                                 </>
-                            ) : (
+                            )}
+                            {viewFilter === 'created' && (
+                                <>
+                                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                    </svg>
+                                    Showing tasks created by you
+                                </>
+                            )}
+                            {viewFilter === 'all' && (
                                 <>
                                     <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -407,7 +432,7 @@ export default function DashboardPage() {
                                 newTaskDescription={newTaskDescription}
                                 setNewTaskDescription={setNewTaskDescription}
                                 createTask={createTask}
-                                showMyTasksOnly={showMyTasksOnly}
+                                viewFilter={viewFilter}
                             />
                         ))}
                     </div>

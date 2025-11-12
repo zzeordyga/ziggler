@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Task } from '@/types'
+import { Task, User } from '@/types'
 import { useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
+import { useUsers } from '@/hooks/useUsers'
 
 interface TaskCardProps {
     task: Task
@@ -14,9 +15,26 @@ export default function TaskCard({ task }: TaskCardProps) {
     const [isEditing, setIsEditing] = useState(false)
     const [editTitle, setEditTitle] = useState(task.title)
     const [editDescription, setEditDescription] = useState(task.description)
+    const [showAssignDropdown, setShowAssignDropdown] = useState(false)
+    const dropdownRef = useRef<HTMLDivElement>(null)
 
     const updateMutation = useUpdateTask()
     const deleteMutation = useDeleteTask()
+    const { data: users = [] } = useUsers()
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setShowAssignDropdown(false)
+            }
+        }
+
+        if (showAssignDropdown) {
+            document.addEventListener('mousedown', handleClickOutside)
+            return () => document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [showAssignDropdown])
 
     const {
         attributes,
@@ -55,6 +73,16 @@ export default function TaskCard({ task }: TaskCardProps) {
         if (window.confirm('Are you sure you want to delete this task?')) {
             deleteMutation.mutate(task.id)
         }
+    }
+
+    const handleAssignUser = (userId: number | null) => {
+        updateMutation.mutate({
+            taskId: task.id,
+            updates: {
+                assignee_id: userId || undefined
+            }
+        })
+        setShowAssignDropdown(false)
     }
 
     if (isEditing) {
@@ -175,8 +203,16 @@ export default function TaskCard({ task }: TaskCardProps) {
                     </div>
                 )}
 
-                {/* User Information */}
                 <div className="mb-3 space-y-2">
+                    {task.parent_id && (
+                        <div className="flex items-center gap-2 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 px-2 py-1 rounded-md border-l-2 border-blue-400">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                            <span className="font-medium">Subtask of #{task.parent_id}</span>
+                        </div>
+                    )}
+
                     {task.creator && (
                         <div className="flex items-center gap-2 text-xs text-muted">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -185,14 +221,77 @@ export default function TaskCard({ task }: TaskCardProps) {
                             <span>Created by: {task.creator.display_name || task.creator.username}</span>
                         </div>
                     )}
-                    {task.assignee && (
-                        <div className="flex items-center gap-2 text-xs text-muted">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span>Assigned to: {task.assignee.display_name || task.assignee.username}</span>
-                        </div>
-                    )}
+
+                    <div className="flex items-center gap-2 text-xs text-muted relative">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {task.assignee ? (
+                            <div className="flex items-center gap-1">
+                                <span>Assigned to: {task.assignee.display_name || task.assignee.username}</span>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setShowAssignDropdown(!showAssignDropdown)
+                                    }}
+                                    className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-blue-600 relative z-20"
+                                    title="Change assignee"
+                                >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1">
+                                <span className="text-gray-400">Unassigned</span>
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        setShowAssignDropdown(!showAssignDropdown)
+                                    }}
+                                    className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-blue-600 relative z-20"
+                                    title="Assign user"
+                                >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                    </svg>
+                                </button>
+                            </div>
+                        )}
+
+                        {showAssignDropdown && (
+                            <div
+                                ref={dropdownRef}
+                                className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-50 min-w-40"
+                            >
+                                <div className="py-1">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleAssignUser(null)
+                                        }}
+                                        className="w-full text-left px-3 py-1 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                                    >
+                                        Unassign
+                                    </button>
+                                    {users.map((user) => (
+                                        <button
+                                            key={user.id}
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                handleAssignUser(user.id)
+                                            }}
+                                            className={`w-full text-left px-3 py-1 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 ${task.assignee_id === user.id ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : ''
+                                                }`}
+                                        >
+                                            {user.display_name || user.username}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div
