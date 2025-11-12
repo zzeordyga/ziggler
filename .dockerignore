@@ -1,0 +1,10 @@
+# Root .dockerignore
+.git
+.gitignore
+*.md
+README.md
+DOCKER.md
+.env
+.env.*
+*.log
+.DS_Store

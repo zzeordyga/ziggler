@@ -2,10 +2,11 @@ import axios, { AxiosResponse, AxiosError } from 'axios'
 import { io, Socket } from 'socket.io-client'
 import { Task, LoginResponse, RegisterResponse, LoginFormData, RegisterFormData, TasksResponse, StatsResponse } from '@/types'
 
-const API_BASE_URL = 'http://localhost:8080/api/v1'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+const API_FULL_URL = `${API_BASE_URL}/api/v1`
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_FULL_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -44,7 +45,8 @@ apiClient.interceptors.response.use(
 export { apiClient }
 
 export const createSocketIOConnection = (token: string): Socket => {
-  const socket = io('http://localhost:8080', {
+  const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8080'
+  const socket = io(WS_BASE_URL, {
     path: '/api/v1/socket.io/',
     transports: ['websocket', 'polling'],
     upgrade: true,

@@ -1,0 +1,12 @@
+# Backend .dockerignore
+*.db
+*.log
+.env
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+ziggler_backend
+ziggler-backend
+*.exe
