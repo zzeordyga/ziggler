@@ -33,8 +33,9 @@ export default function TaskCard({ task }: TaskCardProps) {
         }
 
         if (showAssignDropdown) {
-            document.addEventListener('mousedown', handleClickOutside)
-            return () => document.removeEventListener('mousedown', handleClickOutside)
+            // Use 'click' instead of 'mousedown' to ensure it fires AFTER button click handlers
+            document.addEventListener('click', handleClickOutside)
+            return () => document.removeEventListener('click', handleClickOutside)
         }
     }, [showAssignDropdown])
 

@@ -77,12 +77,9 @@ export const useUpdateTask = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ taskId, updates }: { taskId: number; updates: Partial<Task> | { unassigned: boolean } }) => {
-      console.log('useUpdateTask mutation called with:', { taskId, updates })
-      return tasksAPI.update(taskId, updates)
-    },
+    mutationFn: ({ taskId, updates }: { taskId: number; updates: Partial<Task> | { unassigned: boolean } }) =>
+      tasksAPI.update(taskId, updates),
     onSuccess: (updatedTask) => {
-      console.log('Task update successful:', updatedTask)
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
       
       queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask)
@@ -115,29 +112,11 @@ export const useUpdateTaskStatus = () => {
   return useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) =>
       tasksAPI.update(taskId, { status }),
-    onMutate: async ({ taskId, status }) => {
-      await queryClient.cancelQueries({ queryKey: taskKeys.lists() })
-
-      const previousQueries = new Map()
-      queryClient.getQueryCache().findAll({ queryKey: taskKeys.lists() }).forEach(query => {
-        previousQueries.set(query.queryKey, query.state.data)
-        
-        queryClient.setQueryData(query.queryKey, (old: Task[] = []) =>
-          old.map(task => task.id === taskId ? { ...task, status } : task)
-        )
-      })
-
-      return { previousQueries }
-    },
-    onError: (err, variables, context) => {
-      if (context?.previousQueries) {
-        context.previousQueries.forEach((data, queryKey) => {
-          queryClient.setQueryData(queryKey, data)
-        })
-      }
-    },
-    onSettled: () => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+    },
+    onError: (err) => {
+      console.error('Failed to update task status:', err)
     },
   })
 }
