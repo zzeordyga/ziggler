@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useSortable } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { useDraggable } from '@dnd-kit/core'
 import { Task } from '@/types'
 import { useUpdateTask, useDeleteTask, useTasks } from '@/hooks/useTasks'
 import { useUsers } from '@/hooks/useUsers'
@@ -44,14 +43,18 @@ export default function TaskCard({ task }: TaskCardProps) {
         listeners,
         setNodeRef,
         transform,
-        transition,
         isDragging,
-    } = useSortable({ id: task.id })
+    } = useDraggable({
+        id: task.id,
+        data: {
+            type: 'task',
+            task: task
+        }
+    })
 
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-    }
+    const style = transform ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    } : undefined
 
     const handleSave = () => {
         const titleChanged = editTitle.trim() !== task.title

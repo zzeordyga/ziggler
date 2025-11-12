@@ -13,10 +13,6 @@ import {
     rectIntersection,
     useDroppable
 } from '@dnd-kit/core'
-import {
-    SortableContext,
-    verticalListSortingStrategy
-} from '@dnd-kit/sortable'
 import { Task, User, TaskStatus, StatusColumns, TASK_STATUSES } from '@/types'
 import { getStatusDisplayName, getStatusColor } from '@/utils/tasks'
 import { useTasks, useCreateTask, useUpdateTaskStatus } from '@/hooks/useTasks'
@@ -164,23 +160,21 @@ function DroppableColumn({
                 </div>
             )}
 
-            <SortableContext items={tasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-3 flex-1">
-                    {tasks.map((task) => (
-                        <TaskCard key={task.id} task={task} />
-                    ))}
+            <div className="space-y-3 flex-1">
+                {tasks.map((task) => (
+                    <TaskCard key={task.id} task={task} />
+                ))}
 
-                    {tasks.length === 0 && showNewTaskForm !== status && (
-                        <div className="text-center py-8 text-muted">
-                            <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                            </svg>
-                            <p className="text-sm">No tasks yet</p>
-                            <p className="text-xs">Drag tasks here or click + to add</p>
-                        </div>
-                    )}
-                </div>
-            </SortableContext>
+                {tasks.length === 0 && showNewTaskForm !== status && (
+                    <div className="text-center py-8 text-muted">
+                        <svg className="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                        </svg>
+                        <p className="text-sm">No tasks yet</p>
+                        <p className="text-xs">Drag tasks here or click + to add</p>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
