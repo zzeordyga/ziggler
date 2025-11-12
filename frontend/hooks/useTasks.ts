@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { tasksAPI } from '@/lib/api'
-import { Task, TaskStatus } from '@/types'
+import { Task, TaskStatus, TasksResponse, StatsResponse } from '@/types'
 
-// Query Keys
 export const taskKeys = {
   all: ['tasks'] as const,
   lists: () => [...taskKeys.all, 'list'] as const,
@@ -11,26 +10,62 @@ export const taskKeys = {
   detail: (id: number) => [...taskKeys.details(), id] as const,
 }
 
-// Fetch all tasks
-export const useTasks = () => {
+export const useTasks = (params?: { 
+  myTasksOnly?: boolean
+  page?: number
+  pageSize?: number
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}) => {
   return useQuery({
-    queryKey: taskKeys.lists(),
-    queryFn: tasksAPI.getAll,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    queryKey: taskKeys.list({ 
+      myTasksOnly: params?.myTasksOnly || false,
+      page: params?.page || 1,
+      pageSize: params?.pageSize || 50,
+      sortBy: params?.sortBy || 'created_at',
+      sortOrder: params?.sortOrder || 'desc'
+    }),
+    queryFn: () => tasksAPI.getAll(params),
+    staleTime: 5 * 60 * 1000,
+    select: (data: TasksResponse) => data.data, // Extract just the tasks array for compatibility
   })
 }
 
-// Create task mutation
+export const useTasksWithPagination = (params?: { 
+  myTasksOnly?: boolean
+  page?: number
+  pageSize?: number
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}) => {
+  return useQuery({
+    queryKey: taskKeys.list({ 
+      myTasksOnly: params?.myTasksOnly || false,
+      page: params?.page || 1,
+      pageSize: params?.pageSize || 50,
+      sortBy: params?.sortBy || 'created_at',
+      sortOrder: params?.sortOrder || 'desc'
+    }),
+    queryFn: () => tasksAPI.getAll(params),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+export const useStats = (userId?: number) => {
+  return useQuery({
+    queryKey: ['stats', userId],
+    queryFn: () => tasksAPI.getStats(userId),
+    staleTime: 2 * 60 * 1000,
+  })
+}
+
 export const useCreateTask = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: tasksAPI.create,
-    onSuccess: (newTask) => {
-      // Add the new task to existing cache
-      queryClient.setQueryData(taskKeys.lists(), (old: Task[] = []) => [...old, newTask])
-      
-      // Invalidate to refetch and ensure consistency
+    onSuccess: () => {
+      // Invalidate all task queries to refetch with current filters
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
     },
     onError: (error) => {
@@ -39,7 +74,6 @@ export const useCreateTask = () => {
   })
 }
 
-// Update task mutation
 export const useUpdateTask = () => {
   const queryClient = useQueryClient()
 
@@ -47,12 +81,10 @@ export const useUpdateTask = () => {
     mutationFn: ({ taskId, updates }: { taskId: number; updates: Partial<Task> }) =>
       tasksAPI.update(taskId, updates),
     onSuccess: (updatedTask) => {
-      // Update the task in cache
-      queryClient.setQueryData(taskKeys.lists(), (old: Task[] = []) =>
-        old.map(task => task.id === updatedTask.id ? updatedTask : task)
-      )
+      // Invalidate all task queries to refetch with current filters
+      queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
       
-      // Update individual task cache if it exists
+      // Update the specific task detail cache
       queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask)
     },
     onError: (error) => {
@@ -61,19 +93,16 @@ export const useUpdateTask = () => {
   })
 }
 
-// Delete task mutation
 export const useDeleteTask = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: tasksAPI.delete,
     onSuccess: (_, deletedTaskId) => {
-      // Remove the task from cache
-      queryClient.setQueryData(taskKeys.lists(), (old: Task[] = []) =>
-        old.filter(task => task.id !== deletedTaskId)
-      )
+      // Invalidate all task queries to refetch with current filters
+      queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
       
-      // Remove individual task cache
+      // Remove the specific task detail cache
       queryClient.removeQueries({ queryKey: taskKeys.detail(deletedTaskId) })
     },
     onError: (error) => {
@@ -82,7 +111,6 @@ export const useDeleteTask = () => {
   })
 }
 
-// Update task status (for drag & drop)
 export const useUpdateTaskStatus = () => {
   const queryClient = useQueryClient()
 
@@ -90,27 +118,32 @@ export const useUpdateTaskStatus = () => {
     mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) =>
       tasksAPI.update(taskId, { status }),
     onMutate: async ({ taskId, status }) => {
-      // Cancel outgoing refetches
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
       await queryClient.cancelQueries({ queryKey: taskKeys.lists() })
 
-      // Snapshot previous value
-      const previousTasks = queryClient.getQueryData(taskKeys.lists())
+      // Snapshot the previous value for all queries
+      const previousQueries = new Map()
+      queryClient.getQueryCache().findAll({ queryKey: taskKeys.lists() }).forEach(query => {
+        previousQueries.set(query.queryKey, query.state.data)
+        
+        // Update each query's data optimistically
+        queryClient.setQueryData(query.queryKey, (old: Task[] = []) =>
+          old.map(task => task.id === taskId ? { ...task, status } : task)
+        )
+      })
 
-      // Optimistically update cache
-      queryClient.setQueryData(taskKeys.lists(), (old: Task[] = []) =>
-        old.map(task => task.id === taskId ? { ...task, status } : task)
-      )
-
-      return { previousTasks }
+      return { previousQueries }
     },
     onError: (err, variables, context) => {
-      // Revert on error
-      if (context?.previousTasks) {
-        queryClient.setQueryData(taskKeys.lists(), context.previousTasks)
+      // Rollback all queries if there was an error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach((data, queryKey) => {
+          queryClient.setQueryData(queryKey, data)
+        })
       }
     },
     onSettled: () => {
-      // Always refetch after error or success
+      // Always refetch after error or success to ensure we have the latest data
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
     },
   })

@@ -18,6 +18,8 @@ func main() {
 
 	database.SeedDatabase()
 
+	handlers.InitSocketIO()
+
 	r := gin.Default()
 
 	r.Use(middleware.CorsMiddleware())
@@ -35,7 +37,9 @@ func main() {
 
 		protected.GET("/profile", handlers.GetProfile)
 
-		protected.GET("/ws", handlers.HandleWebSocket)
+		// Socket.IO endpoint
+		protected.GET("/socket.io/*any", handlers.HandleSocketIO)
+		protected.POST("/socket.io/*any", handlers.HandleSocketIO)
 
 		protected.GET("/tasks", handlers.GetTasks)
 		protected.POST("/tasks", handlers.CreateTask)
@@ -49,6 +53,8 @@ func main() {
 		protected.GET("/users/:id", handlers.GetUser)
 		protected.PUT("/users/:id", handlers.UpdateUser)
 		protected.DELETE("/users/:id", handlers.DeleteUser)
+
+		protected.GET("/stats", handlers.GetStats)
 
 	}
 

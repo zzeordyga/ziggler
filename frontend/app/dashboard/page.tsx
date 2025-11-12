@@ -21,6 +21,8 @@ import { Task, User, TaskStatus, StatusColumns, TASK_STATUSES } from '@/types'
 import { getStatusDisplayName, getStatusColor } from '@/utils/tasks'
 import { useTasks, useCreateTask, useUpdateTaskStatus } from '@/hooks/useTasks'
 import TaskCard from '@/components/TaskCard'
+import SearchFilter from '@/components/SearchFilter'
+import WebSocketStatus from '@/components/WebSocketStatus'
 
 const STATUS_COLUMNS: StatusColumns = TASK_STATUSES.reduce((acc, status) => {
     acc[status] = {
@@ -43,7 +45,8 @@ function DroppableColumn({
     setNewTaskTitle,
     newTaskDescription,
     setNewTaskDescription,
-    createTask
+    createTask,
+    showMyTasksOnly
 }: {
     status: string
     title: string
@@ -56,6 +59,7 @@ function DroppableColumn({
     newTaskDescription: string
     setNewTaskDescription: (description: string) => void
     createTask: (status: string) => void
+    showMyTasksOnly: boolean
 }) {
     const { setNodeRef, isOver } = useDroppable({
         id: status,
@@ -100,6 +104,15 @@ function DroppableColumn({
                         onChange={(e) => setNewTaskDescription(e.target.value)}
                         className="input-field mb-3 min-h-20 resize-none"
                     />
+
+                    {/* Show auto-assignment note when in "My Tasks" mode */}
+                    <div className="mb-3 text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {showMyTasksOnly ? "Task will be auto-assigned to you" : "Task will be unassigned"}
+                    </div>
+
                     <div className="flex gap-2">
                         <button
                             onClick={() => createTask(status)}
@@ -161,10 +174,12 @@ export default function DashboardPage() {
     const [showNewTaskForm, setShowNewTaskForm] = useState<string | null>(null)
     const [newTaskTitle, setNewTaskTitle] = useState('')
     const [newTaskDescription, setNewTaskDescription] = useState('')
+    const [searchTerm, setSearchTerm] = useState('')
+    const [showMyTasksOnly, setShowMyTasksOnly] = useState(true) // Default to showing only assigned tasks
     const router = useRouter()
 
     // TanStack Query hooks
-    const { data: tasks = [], isLoading, error } = useTasks()
+    const { data: tasks = [], isLoading, error } = useTasks({ myTasksOnly: showMyTasksOnly })
     const createTaskMutation = useCreateTask()
     const updateTaskStatusMutation = useUpdateTaskStatus()
 
@@ -188,11 +203,18 @@ export default function DashboardPage() {
     const createTask = async (status: string) => {
         if (!newTaskTitle.trim()) return
 
-        createTaskMutation.mutate({
+        const taskData: Partial<Task> = {
             title: newTaskTitle.trim(),
             description: newTaskDescription.trim(),
             status: status as TaskStatus,
-        }, {
+        }
+
+        // If "My Tasks Only" is enabled, auto-assign to current user
+        if (showMyTasksOnly && user?.id) {
+            taskData.assignee_id = user.id
+        }
+
+        createTaskMutation.mutate(taskData, {
             onSuccess: () => {
                 setNewTaskTitle('')
                 setNewTaskDescription('')
@@ -228,8 +250,34 @@ export default function DashboardPage() {
         router.push('/')
     }
 
+    const filterTasks = (tasksToFilter: Task[]) => {
+        if (!searchTerm.trim()) return tasksToFilter
+
+        const searchLower = searchTerm.toLowerCase()
+        return tasksToFilter.filter(task => {
+            // Search in title and description
+            const titleMatch = task.title.toLowerCase().includes(searchLower)
+            const descriptionMatch = task.description.toLowerCase().includes(searchLower)
+
+            // Search in creator name
+            const creatorMatch = task.creator && (
+                task.creator.display_name?.toLowerCase().includes(searchLower) ||
+                task.creator.username.toLowerCase().includes(searchLower)
+            )
+
+            // Search in assignee name
+            const assigneeMatch = task.assignee && (
+                task.assignee.display_name?.toLowerCase().includes(searchLower) ||
+                task.assignee.username.toLowerCase().includes(searchLower)
+            )
+
+            return titleMatch || descriptionMatch || creatorMatch || assigneeMatch
+        })
+    }
+
     const getTasksByStatus = (status: string) => {
-        return tasks.filter(task => task.status === status)
+        const statusTasks = tasks.filter(task => task.status === status)
+        return filterTasks(statusTasks)
     }
 
     if (isLoading) {
@@ -268,17 +316,76 @@ export default function DashboardPage() {
                             <h1 className="heading-2">Task Board</h1>
                             <p className="text-muted">Welcome back, {user?.display_name || user?.username}!</p>
                         </div>
-                        <button
-                            onClick={handleLogout}
-                            className="btn-secondary"
-                        >
-                            Logout
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <a
+                                href="/stats"
+                                className="btn-secondary text-sm"
+                            >
+                                📊 Statistics
+                            </a>
+                            <button
+                                onClick={handleLogout}
+                                className="btn-secondary"
+                            >
+                                Logout
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
 
             <main className="container-main py-8">
+                {/* Filter Controls */}
+                <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-sm font-medium text-gray-900 dark:text-white">View:</h3>
+                            <div className="flex items-center gap-2">
+                                <label className="flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={showMyTasksOnly}
+                                        onChange={(e) => setShowMyTasksOnly(e.target.checked)}
+                                        className="sr-only"
+                                    />
+                                    <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${showMyTasksOnly ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-600'
+                                        }`}>
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showMyTasksOnly ? 'translate-x-6' : 'translate-x-1'
+                                            }`} />
+                                    </div>
+                                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                                        My Tasks Only
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                            {showMyTasksOnly ? (
+                                <>
+                                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                    Showing tasks assigned to you
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                    </svg>
+                                    Showing all tasks
+                                </>
+                            )}
+                            <WebSocketStatus />
+                        </div>
+                    </div>
+                </div>
+
+                <SearchFilter
+                    onSearchChange={setSearchTerm}
+                    placeholder="Search tasks by title, description, creator, or assignee..."
+                />
+
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCorners}
@@ -300,6 +407,7 @@ export default function DashboardPage() {
                                 newTaskDescription={newTaskDescription}
                                 setNewTaskDescription={setNewTaskDescription}
                                 createTask={createTask}
+                                showMyTasksOnly={showMyTasksOnly}
                             />
                         ))}
                     </div>

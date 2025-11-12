@@ -12,6 +12,8 @@ export interface Task {
   parent_id?: number
   created_at: string
   updated_at: string
+  creator?: User
+  assignee?: User
 }
 
 export interface User {
@@ -70,4 +72,41 @@ export interface StatusColumns {
 export interface WSMessage {
   type: 'task_created' | 'task_updated' | 'task_deleted'
   payload: Task | { id: number }
+}
+
+export interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+export type TasksResponse = PaginatedResponse<Task>
+
+export interface UserStats {
+  user_id: number
+  username: string
+  display_name: string
+  todo_tasks: number
+  in_progress_tasks: number
+  completed_tasks: number
+  cancelled_tasks: number
+  total_tasks: number
+  completion_rate: number
+}
+
+export interface TaskStats {
+  total_tasks: number
+  todo_tasks: number
+  in_progress_tasks: number
+  completed_tasks: number
+  cancelled_tasks: number
+  unassigned_tasks: number
+}
+
+export interface StatsResponse {
+  overall_stats: TaskStats
+  user_stats: UserStats[]
+  generated_at: string
 }

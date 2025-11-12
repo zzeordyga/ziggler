@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { RegisterFormData, RegisterResponse } from '@/types'
+import { authAPI } from '@/lib/api'
 
 export default function RegisterPage() {
     const [formData, setFormData] = useState<RegisterFormData>({
@@ -29,27 +30,15 @@ export default function RegisterPage() {
         setError('')
 
         try {
-            const response = await fetch('http://localhost:8080/api/v1/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData),
-            })
+            const data: RegisterResponse = await authAPI.register(formData)
 
-            const data: RegisterResponse = await response.json()
-
-            if (response.ok) {
-                if (typeof window !== 'undefined') {
-                    localStorage.setItem('token', data.token)
-                    localStorage.setItem('user', JSON.stringify(data.user))
-                }
-                router.push('/dashboard')
-            } else {
-                setError('Registration failed')
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('token', data.token)
+                localStorage.setItem('user', JSON.stringify(data.user))
             }
-        } catch {
-            setError('Network error. Please try again.')
+            router.push('/dashboard')
+        } catch (error) {
+            setError(error instanceof Error ? error.message : 'Registration failed')
         } finally {
             setLoading(false)
         }

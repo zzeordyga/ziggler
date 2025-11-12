@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,132 +9,18 @@ import (
 	"ziggler_backend/database"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/websocket"
 )
 
 type User = database.User
 type Task = database.Task
 
-type Client struct {
-	Conn   *websocket.Conn
-	Send   chan []byte
-	UserID uint
-}
 
-type Hub struct {
-	Clients    map[*Client]bool
-	Broadcast  chan []byte
-	Register   chan *Client
-	Unregister chan *Client
-}
-
-type WSMessage struct {
-	Type    string      `json:"type"`
-	Payload interface{} `json:"payload"`
-}
 
 type TaskUpdateRequest struct {
 	Title       *string `json:"title,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Status      *string `json:"status,omitempty"`
 	AssigneeID  *uint   `json:"assignee_id,omitempty"`
-}
-
-var hub *Hub
-
-func init() {
-
-	hub = &Hub{
-		Clients:    make(map[*Client]bool),
-		Broadcast:  make(chan []byte),
-		Register:   make(chan *Client),
-		Unregister: make(chan *Client),
-	}
-	go hub.Run()
-}
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
-func (h *Hub) Run() {
-	for {
-		select {
-		case client := <-h.Register:
-			h.Clients[client] = true
-			log.Printf("Client connected: %d", client.UserID)
-
-		case client := <-h.Unregister:
-			if _, ok := h.Clients[client]; ok {
-				delete(h.Clients, client)
-				close(client.Send)
-				log.Printf("Client disconnected: %d", client.UserID)
-			}
-
-		case message := <-h.Broadcast:
-			for client := range h.Clients {
-				select {
-				case client.Send <- message:
-				default:
-					close(client.Send)
-					delete(h.Clients, client)
-				}
-			}
-		}
-	}
-}
-
-func HandleWebSocket(c *gin.Context) {
-
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
-		return
-	}
-
-	client := &Client{
-		Conn:   conn,
-		Send:   make(chan []byte, 256),
-		UserID: uint(userID.(int)),
-	}
-
-	hub.Register <- client
-
-	go client.WritePump()
-	go client.ReadPump()
-}
-
-func (c *Client) WritePump() {
-	defer func() {
-		c.Conn.Close()
-	}()
-
-	for message := range c.Send {
-		c.Conn.WriteMessage(websocket.TextMessage, message)
-	}
-	c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
-}
-
-func (c *Client) ReadPump() {
-	defer func() {
-		hub.Unregister <- c
-		c.Conn.Close()
-	}()
-
-	for {
-		_, _, err := c.Conn.ReadMessage()
-		if err != nil {
-			break
-		}
-	}
 }
 
 func HealthCheck(c *gin.Context) {
@@ -352,13 +236,87 @@ func GetProfile(c *gin.Context) {
 	})
 }
 
+type PaginatedResponse struct {
+	Data       []Task `json:"data"`
+	Total      int64  `json:"total"`
+	Page       int    `json:"page"`
+	PageSize   int    `json:"page_size"`
+	TotalPages int    `json:"total_pages"`
+}
+
 func GetTasks(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 50
+	}
+
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	sortOrder := c.DefaultQuery("sort_order", "desc")
+
+	validSortFields := map[string]bool{
+		"id":          true,
+		"title":       true,
+		"status":      true,
+		"created_at":  true,
+		"updated_at":  true,
+		"creator_id":  true,
+		"assignee_id": true,
+	}
+
+	if !validSortFields[sortBy] {
+		sortBy = "created_at"
+	}
+
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "desc"
+	}
+
 	var tasks []Task
-	if err := database.DB.Preload("Creator").Preload("Assignee").Preload("Subtasks").Find(&tasks).Error; err != nil {
+	var total int64
+
+	query := database.DB.Preload("Creator").Preload("Assignee").Preload("Subtasks")
+	countQuery := database.DB.Model(&Task{})
+
+	myTasksOnly := c.Query("my_tasks") == "true"
+	if myTasksOnly {
+		query = query.Where("assignee_id = ?", uint(userID.(int)))
+		countQuery = countQuery.Where("assignee_id = ?", uint(userID.(int)))
+	}
+
+	if err := countQuery.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count tasks"})
+		return
+	}
+
+	offset := (page - 1) * pageSize
+	orderClause := sortBy + " " + sortOrder
+
+	if err := query.Order(orderClause).Offset(offset).Limit(pageSize).Find(&tasks).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch tasks"})
 		return
 	}
-	c.JSON(http.StatusOK, tasks)
+
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+
+	response := PaginatedResponse{
+		Data:       tasks,
+		Total:      total,
+		Page:       page,
+		PageSize:   pageSize,
+		TotalPages: totalPages,
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 func GetTask(c *gin.Context) {
@@ -421,13 +379,13 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	wsMessage := WSMessage{
-		Type:    "task_created",
-		Payload: newTask,
+	if err := database.DB.Preload("Creator").Preload("Assignee").First(&newTask, newTask.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load task relationships"})
+		return
 	}
-	if msgBytes, err := json.Marshal(wsMessage); err == nil {
-		hub.Broadcast <- msgBytes
-	}
+
+	// Broadcast task creation via Socket.IO
+	BroadcastTaskCreated(newTask)
 
 	c.JSON(http.StatusCreated, newTask)
 }
@@ -474,13 +432,13 @@ func UpdateTask(c *gin.Context) {
 		return
 	}
 
-	wsMessage := WSMessage{
-		Type:    "task_updated",
-		Payload: updatedTask,
+	if err := database.DB.Preload("Creator").Preload("Assignee").First(&updatedTask, updatedTask.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load task relationships"})
+		return
 	}
-	if msgBytes, err := json.Marshal(wsMessage); err == nil {
-		hub.Broadcast <- msgBytes
-	}
+
+	// Broadcast task update via Socket.IO
+	BroadcastTaskUpdated(updatedTask)
 
 	c.JSON(http.StatusOK, updatedTask)
 }
@@ -524,13 +482,8 @@ func DeleteTask(c *gin.Context) {
 		return
 	}
 
-	wsMessage := WSMessage{
-		Type:    "task_deleted",
-		Payload: gin.H{"id": uint(id)},
-	}
-	if msgBytes, err := json.Marshal(wsMessage); err == nil {
-		hub.Broadcast <- msgBytes
-	}
+	// Broadcast task deletion via Socket.IO
+	BroadcastTaskDeleted(uint(id), task.AssigneeID)
 
 	c.Status(http.StatusNoContent)
 }
@@ -550,4 +503,114 @@ func GetSubtasks(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, subtasks)
+}
+
+type UserStats struct {
+	UserID         uint    `json:"user_id"`
+	Username       string  `json:"username"`
+	DisplayName    string  `json:"display_name"`
+	TodoTasks      int64   `json:"todo_tasks"`
+	InProgress     int64   `json:"in_progress_tasks"`
+	CompletedTasks int64   `json:"completed_tasks"`
+	CancelledTasks int64   `json:"cancelled_tasks"`
+	TotalTasks     int64   `json:"total_tasks"`
+	CompletionRate float64 `json:"completion_rate"`
+}
+
+type TaskStats struct {
+	TotalTasks      int64 `json:"total_tasks"`
+	TodoTasks       int64 `json:"todo_tasks"`
+	InProgressTasks int64 `json:"in_progress_tasks"`
+	CompletedTasks  int64 `json:"completed_tasks"`
+	CancelledTasks  int64 `json:"cancelled_tasks"`
+	UnassignedTasks int64 `json:"unassigned_tasks"`
+}
+
+type StatsResponse struct {
+	OverallStats TaskStats   `json:"overall_stats"`
+	UserStats    []UserStats `json:"user_stats"`
+	GeneratedAt  time.Time   `json:"generated_at"`
+}
+
+func GetStats(c *gin.Context) {
+	_, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+
+	targetUserID := c.Query("user_id")
+
+	var userStats []UserStats
+	var overallStats TaskStats
+
+	database.DB.Model(&Task{}).Count(&overallStats.TotalTasks)
+	database.DB.Model(&Task{}).Where("status = ?", database.TaskStatusTodo).Count(&overallStats.TodoTasks)
+	database.DB.Model(&Task{}).Where("status = ?", database.TaskStatusInProgress).Count(&overallStats.InProgressTasks)
+	database.DB.Model(&Task{}).Where("status = ?", database.TaskStatusDone).Count(&overallStats.CompletedTasks)
+	database.DB.Model(&Task{}).Where("status = ?", database.TaskStatusCancelled).Count(&overallStats.CancelledTasks)
+	database.DB.Model(&Task{}).Where("assignee_id IS NULL").Count(&overallStats.UnassignedTasks)
+
+	if targetUserID != "" {
+
+		targetID, err := strconv.ParseUint(targetUserID, 10, 32)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		var user User
+		if err := database.DB.First(&user, uint(targetID)).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+
+		var stats UserStats
+		stats.UserID = user.ID
+		stats.Username = user.Username
+		stats.DisplayName = user.DisplayName
+
+		database.DB.Model(&Task{}).Where("assignee_id = ?", user.ID).Count(&stats.TotalTasks)
+		database.DB.Model(&Task{}).Where("assignee_id = ? AND status = ?", user.ID, database.TaskStatusTodo).Count(&stats.TodoTasks)
+		database.DB.Model(&Task{}).Where("assignee_id = ? AND status = ?", user.ID, database.TaskStatusInProgress).Count(&stats.InProgress)
+		database.DB.Model(&Task{}).Where("assignee_id = ? AND status = ?", user.ID, database.TaskStatusDone).Count(&stats.CompletedTasks)
+		database.DB.Model(&Task{}).Where("assignee_id = ? AND status = ?", user.ID, database.TaskStatusCancelled).Count(&stats.CancelledTasks)
+
+		if stats.TotalTasks > 0 {
+			stats.CompletionRate = float64(stats.CompletedTasks) / float64(stats.TotalTasks) * 100
+		}
+
+		userStats = append(userStats, stats)
+	} else {
+
+		var users []User
+		database.DB.Where("id IN (SELECT DISTINCT assignee_id FROM tasks WHERE assignee_id IS NOT NULL)").Find(&users)
+
+		for _, user := range users {
+			var stats UserStats
+			stats.UserID = user.ID
+			stats.Username = user.Username
+			stats.DisplayName = user.DisplayName
+
+			database.DB.Model(&Task{}).Where("assignee_id = ?", user.ID).Count(&stats.TotalTasks)
+			database.DB.Model(&Task{}).Where("assignee_id = ? AND status = ?", user.ID, database.TaskStatusTodo).Count(&stats.TodoTasks)
+			database.DB.Model(&Task{}).Where("assignee_id = ? AND status = ?", user.ID, database.TaskStatusInProgress).Count(&stats.InProgress)
+			database.DB.Model(&Task{}).Where("assignee_id = ? AND status = ?", user.ID, database.TaskStatusDone).Count(&stats.CompletedTasks)
+			database.DB.Model(&Task{}).Where("assignee_id = ? AND status = ?", user.ID, database.TaskStatusCancelled).Count(&stats.CancelledTasks)
+
+			if stats.TotalTasks > 0 {
+				stats.CompletionRate = float64(stats.CompletedTasks) / float64(stats.TotalTasks) * 100
+			}
+
+			userStats = append(userStats, stats)
+		}
+	}
+
+	response := StatsResponse{
+		OverallStats: overallStats,
+		UserStats:    userStats,
+		GeneratedAt:  time.Now(),
+	}
+
+	c.JSON(http.StatusOK, response)
 }

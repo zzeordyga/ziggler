@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LoginResponse } from '@/types'
+import { authAPI } from '@/lib/api'
 
 export default function LoginPage() {
     const [email, setEmail] = useState('')
@@ -18,27 +19,15 @@ export default function LoginPage() {
         setError('')
 
         try {
-            const response = await fetch('http://localhost:8080/api/v1/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email, password }),
-            })
+            const data: LoginResponse = await authAPI.login({ email, password })
 
-            const data: LoginResponse = await response.json()
-
-            if (response.ok) {
-                if (typeof window !== 'undefined') {
-                    localStorage.setItem('token', data.token)
-                    localStorage.setItem('user', JSON.stringify(data.user))
-                }
-                router.push('/dashboard')
-            } else {
-                setError('Login failed')
+            if (typeof window !== 'undefined') {
+                localStorage.setItem('token', data.token)
+                localStorage.setItem('user', JSON.stringify(data.user))
             }
-        } catch {
-            setError('Network error. Please try again.')
+            router.push('/dashboard')
+        } catch (error) {
+            setError(error instanceof Error ? error.message : 'Login failed')
         } finally {
             setLoading(false)
         }
