@@ -144,7 +144,19 @@ function DroppableColumn({
 }
 
 export default function DashboardPage() {
-    const [user, setUser] = useState<User | null>(null)
+    const [user, setUser] = useState<User | null>(() => {
+        if (typeof window !== 'undefined') {
+            const userData = localStorage.getItem('user')
+            if (userData) {
+                try {
+                    return JSON.parse(userData)
+                } catch (error) {
+                    console.error('Failed to parse user data:', error)
+                }
+            }
+        }
+        return null
+    })
     const [activeTask, setActiveTask] = useState<Task | null>(null)
     const [showNewTaskForm, setShowNewTaskForm] = useState<string | null>(null)
     const [newTaskTitle, setNewTaskTitle] = useState('')
@@ -169,14 +181,6 @@ export default function DashboardPage() {
         const userData = localStorage.getItem('user')
 
         if (!token || !userData) {
-            router.push('/login')
-            return
-        }
-
-        try {
-            setUser(JSON.parse(userData))
-        } catch (error) {
-            console.error('Failed to parse user data:', error)
             router.push('/login')
         }
     }, [router])
@@ -228,12 +232,28 @@ export default function DashboardPage() {
         return tasks.filter(task => task.status === status)
     }
 
-    if (loading) {
+    if (isLoading) {
         return (
             <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
                     <p className="mt-4 text-muted">Loading your tasks...</p>
+                </div>
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-center">
+                    <p className="text-red-600 dark:text-red-400">Failed to load tasks. Please try again.</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="mt-4 btn-primary"
+                    >
+                        Retry
+                    </button>
                 </div>
             </div>
         )

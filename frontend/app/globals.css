@@ -76,7 +76,15 @@ body {
 }
 
 .task-card {
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow duration-200;
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-all duration-200;
+}
+
+.task-card:hover .task-actions {
+  @apply opacity-100;
+}
+
+.task-actions {
+  @apply opacity-0 transition-opacity duration-200;
 }
 
 .task-status-todo {
