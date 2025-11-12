@@ -27,7 +27,7 @@ export const useTasks = (params?: {
     }),
     queryFn: () => tasksAPI.getAll(params),
     staleTime: 5 * 60 * 1000,
-    select: (data: TasksResponse) => data.data, // Extract just the tasks array for compatibility
+    select: (data: TasksResponse) => data.data
   })
 }
 
@@ -65,7 +65,6 @@ export const useCreateTask = () => {
   return useMutation({
     mutationFn: tasksAPI.create,
     onSuccess: () => {
-      // Invalidate all task queries to refetch with current filters
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
     },
     onError: (error) => {
@@ -78,13 +77,11 @@ export const useUpdateTask = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ taskId, updates }: { taskId: number; updates: Partial<Task> }) =>
+    mutationFn: ({ taskId, updates }: { taskId: number; updates: Partial<Task> | { unassigned: boolean } }) =>
       tasksAPI.update(taskId, updates),
     onSuccess: (updatedTask) => {
-      // Invalidate all task queries to refetch with current filters
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
       
-      // Update the specific task detail cache
       queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask)
     },
     onError: (error) => {
@@ -99,10 +96,8 @@ export const useDeleteTask = () => {
   return useMutation({
     mutationFn: tasksAPI.delete,
     onSuccess: (_, deletedTaskId) => {
-      // Invalidate all task queries to refetch with current filters
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
       
-      // Remove the specific task detail cache
       queryClient.removeQueries({ queryKey: taskKeys.detail(deletedTaskId) })
     },
     onError: (error) => {
@@ -118,15 +113,12 @@ export const useUpdateTaskStatus = () => {
     mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) =>
       tasksAPI.update(taskId, { status }),
     onMutate: async ({ taskId, status }) => {
-      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
       await queryClient.cancelQueries({ queryKey: taskKeys.lists() })
 
-      // Snapshot the previous value for all queries
       const previousQueries = new Map()
       queryClient.getQueryCache().findAll({ queryKey: taskKeys.lists() }).forEach(query => {
         previousQueries.set(query.queryKey, query.state.data)
         
-        // Update each query's data optimistically
         queryClient.setQueryData(query.queryKey, (old: Task[] = []) =>
           old.map(task => task.id === taskId ? { ...task, status } : task)
         )
@@ -135,7 +127,6 @@ export const useUpdateTaskStatus = () => {
       return { previousQueries }
     },
     onError: (err, variables, context) => {
-      // Rollback all queries if there was an error
       if (context?.previousQueries) {
         context.previousQueries.forEach((data, queryKey) => {
           queryClient.setQueryData(queryKey, data)
@@ -143,7 +134,6 @@ export const useUpdateTaskStatus = () => {
       }
     },
     onSettled: () => {
-      // Always refetch after error or success to ensure we have the latest data
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
     },
   })

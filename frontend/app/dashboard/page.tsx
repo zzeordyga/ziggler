@@ -20,10 +20,8 @@ import {
 import { Task, User, TaskStatus, StatusColumns, TASK_STATUSES } from '@/types'
 import { getStatusDisplayName, getStatusColor } from '@/utils/tasks'
 import { useTasks, useCreateTask, useUpdateTaskStatus } from '@/hooks/useTasks'
-import { useUsers } from '@/hooks/useUsers'
 import TaskCard from '@/components/TaskCard'
 import SearchFilter from '@/components/SearchFilter'
-import WebSocketStatus from '@/components/WebSocketStatus'
 
 const STATUS_COLUMNS: StatusColumns = TASK_STATUSES.reduce((acc, status) => {
     acc[status] = {
@@ -46,8 +44,11 @@ function DroppableColumn({
     setNewTaskTitle,
     newTaskDescription,
     setNewTaskDescription,
+    newTaskParentId,
+    setNewTaskParentId,
     createTask,
-    viewFilter
+    viewFilter,
+    allTasks
 }: {
     status: string
     title: string
@@ -59,8 +60,11 @@ function DroppableColumn({
     setNewTaskTitle: (title: string) => void
     newTaskDescription: string
     setNewTaskDescription: (description: string) => void
+    newTaskParentId: number | null
+    setNewTaskParentId: (parentId: number | null) => void
     createTask: (status: string) => void
     viewFilter: 'assigned' | 'created' | 'all'
+    allTasks: Task[]
 }) {
     const { setNodeRef, isOver } = useDroppable({
         id: status,
@@ -106,6 +110,27 @@ function DroppableColumn({
                         className="input-field mb-3 min-h-20 resize-none"
                     />
 
+                    {/* Parent Task Selection */}
+                    <div className="mb-3">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Parent Task (optional)
+                        </label>
+                        <select
+                            value={newTaskParentId || ''}
+                            onChange={(e) => setNewTaskParentId(e.target.value ? parseInt(e.target.value) : null)}
+                            className="input-field"
+                        >
+                            <option value="">No parent task</option>
+                            {allTasks
+                                .filter(task => task.status !== 'cancelled')
+                                .map(task => (
+                                    <option key={task.id} value={task.id}>
+                                        {task.title} ({getStatusDisplayName(task.status)})
+                                    </option>
+                                ))}
+                        </select>
+                    </div>
+
                     {/* Show auto-assignment note when in "My Tasks" mode */}
                     <div className="mb-3 text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -127,6 +152,7 @@ function DroppableColumn({
                                 setShowNewTaskForm(null)
                                 setNewTaskTitle('')
                                 setNewTaskDescription('')
+                                setNewTaskParentId(null)
                             }}
                             className="btn-secondary text-sm px-3 py-1"
                         >
@@ -158,7 +184,7 @@ function DroppableColumn({
 }
 
 export default function DashboardPage() {
-    const [user, setUser] = useState<User | null>(() => {
+    const [user] = useState<User | null>(() => {
         if (typeof window !== 'undefined') {
             const userData = localStorage.getItem('user')
             if (userData) {
@@ -175,12 +201,12 @@ export default function DashboardPage() {
     const [showNewTaskForm, setShowNewTaskForm] = useState<string | null>(null)
     const [newTaskTitle, setNewTaskTitle] = useState('')
     const [newTaskDescription, setNewTaskDescription] = useState('')
+    const [newTaskParentId, setNewTaskParentId] = useState<number | null>(null)
     const [searchTerm, setSearchTerm] = useState('')
     const [viewFilter, setViewFilter] = useState<'assigned' | 'created' | 'all'>('assigned')
     const router = useRouter()
 
     const { data: tasks = [], isLoading, error } = useTasks({ myTasksOnly: viewFilter === 'assigned' })
-    const { data: users = [] } = useUsers()
     const createTaskMutation = useCreateTask()
     const updateTaskStatusMutation = useUpdateTaskStatus()
 
@@ -214,10 +240,15 @@ export default function DashboardPage() {
             taskData.assignee_id = user.id
         }
 
+        if (newTaskParentId) {
+            taskData.parent_id = newTaskParentId
+        }
+
         createTaskMutation.mutate(taskData, {
             onSuccess: () => {
                 setNewTaskTitle('')
                 setNewTaskDescription('')
+                setNewTaskParentId(null)
                 setShowNewTaskForm(null)
             }
         })
@@ -431,8 +462,11 @@ export default function DashboardPage() {
                                 setNewTaskTitle={setNewTaskTitle}
                                 newTaskDescription={newTaskDescription}
                                 setNewTaskDescription={setNewTaskDescription}
+                                newTaskParentId={newTaskParentId}
+                                setNewTaskParentId={setNewTaskParentId}
                                 createTask={createTask}
                                 viewFilter={viewFilter}
+                                allTasks={tasks}
                             />
                         ))}
                     </div>

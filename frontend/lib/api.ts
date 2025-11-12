@@ -194,7 +194,7 @@ export const tasksAPI = {
     }
   },
 
-  update: async (taskId: number, updates: Partial<Task>): Promise<Task> => {
+  update: async (taskId: number, updates: Partial<Task> | { unassigned: boolean }): Promise<Task> => {
     try {
       const response = await apiClient.put<Task>(`/tasks/${taskId}`, updates)
       return response.data

@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Task, User } from '@/types'
-import { useUpdateTask, useDeleteTask } from '@/hooks/useTasks'
+import { useUpdateTask, useDeleteTask, useTasks } from '@/hooks/useTasks'
 import { useUsers } from '@/hooks/useUsers'
+import { getStatusDisplayName } from '@/utils/tasks'
 
 interface TaskCardProps {
     task: Task
@@ -15,14 +16,15 @@ export default function TaskCard({ task }: TaskCardProps) {
     const [isEditing, setIsEditing] = useState(false)
     const [editTitle, setEditTitle] = useState(task.title)
     const [editDescription, setEditDescription] = useState(task.description)
+    const [editParentId, setEditParentId] = useState<number | null>(task.parent_id || null)
     const [showAssignDropdown, setShowAssignDropdown] = useState(false)
     const dropdownRef = useRef<HTMLDivElement>(null)
 
     const updateMutation = useUpdateTask()
     const deleteMutation = useDeleteTask()
     const { data: users = [] } = useUsers()
+    const { data: allTasks = [] } = useTasks()
 
-    // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -51,12 +53,17 @@ export default function TaskCard({ task }: TaskCardProps) {
     }
 
     const handleSave = () => {
-        if (editTitle.trim() !== task.title || editDescription.trim() !== task.description) {
+        const titleChanged = editTitle.trim() !== task.title
+        const descriptionChanged = editDescription.trim() !== task.description
+        const parentChanged = editParentId !== (task.parent_id || null)
+
+        if (titleChanged || descriptionChanged || parentChanged) {
             updateMutation.mutate({
                 taskId: task.id,
                 updates: {
                     title: editTitle.trim(),
                     description: editDescription.trim(),
+                    parent_id: editParentId || undefined,
                 }
             })
         }
@@ -66,6 +73,7 @@ export default function TaskCard({ task }: TaskCardProps) {
     const handleCancel = () => {
         setEditTitle(task.title)
         setEditDescription(task.description)
+        setEditParentId(task.parent_id || null)
         setIsEditing(false)
     }
 
@@ -102,6 +110,27 @@ export default function TaskCard({ task }: TaskCardProps) {
                     className="input-field mb-3 min-h-20 resize-none"
                     placeholder="Task description..."
                 />
+
+                <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Parent Task (optional)
+                    </label>
+                    <select
+                        value={editParentId || ''}
+                        onChange={(e) => setEditParentId(e.target.value ? parseInt(e.target.value) : null)}
+                        className="input-field"
+                    >
+                        <option value="">No parent task</option>
+                        {allTasks
+                            .filter(t => t.id !== task.id && t.status !== 'cancelled' && t.parent_id !== task.id)
+                            .map(t => (
+                                <option key={t.id} value={t.id}>
+                                    {t.title} ({getStatusDisplayName(t.status)})
+                                </option>
+                            ))}
+                    </select>
+                </div>
+
                 <div className="flex justify-end gap-2">
                     <button
                         onClick={handleCancel}
@@ -127,7 +156,7 @@ export default function TaskCard({ task }: TaskCardProps) {
             ref={setNodeRef}
             style={style}
             className={`task-card hover:shadow-lg transition-all duration-200 group relative ${isDragging ? 'opacity-50 scale-95' : ''
-                }`}
+                } ${showAssignDropdown ? 'z-10' : ''}`}
             {...attributes}
         >
             <div
@@ -222,7 +251,7 @@ export default function TaskCard({ task }: TaskCardProps) {
                         </div>
                     )}
 
-                    <div className="flex items-center gap-2 text-xs text-muted relative">
+                    <div className="flex items-center gap-2 text-xs text-muted" style={{ position: 'relative', zIndex: showAssignDropdown ? 1000 : 'auto' }}>
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
@@ -263,7 +292,8 @@ export default function TaskCard({ task }: TaskCardProps) {
                         {showAssignDropdown && (
                             <div
                                 ref={dropdownRef}
-                                className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-50 min-w-40"
+                                className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-xl min-w-40"
+                                style={{ zIndex: 9999 }}
                             >
                                 <div className="py-1">
                                     <button

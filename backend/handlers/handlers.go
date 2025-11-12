@@ -14,13 +14,13 @@ import (
 type User = database.User
 type Task = database.Task
 
-
-
 type TaskUpdateRequest struct {
 	Title       *string `json:"title,omitempty"`
 	Description *string `json:"description,omitempty"`
 	Status      *string `json:"status,omitempty"`
 	AssigneeID  *uint   `json:"assignee_id,omitempty"`
+	ParentID    *uint   `json:"parent_id,omitempty"`
+	Unassigned  bool    `json:"unassigned,omitempty"`
 }
 
 func HealthCheck(c *gin.Context) {
@@ -423,6 +423,27 @@ func UpdateTask(c *gin.Context) {
 	}
 	if updateReq.AssigneeID != nil {
 		updatedTask.AssigneeID = updateReq.AssigneeID
+	}
+	if updateReq.ParentID != nil {
+		if *updateReq.ParentID != 0 {
+			var parentTask Task
+			if err := database.DB.First(&parentTask, *updateReq.ParentID).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Parent task not found"})
+				return
+			}
+			if *updateReq.ParentID == updatedTask.ID {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Task cannot be its own parent"})
+				return
+			}
+			if parentTask.ParentID != nil && *parentTask.ParentID == updatedTask.ID {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Circular dependency detected"})
+				return
+			}
+		}
+		updatedTask.ParentID = updateReq.ParentID
+	}
+	if updateReq.Unassigned {
+		updatedTask.AssigneeID = nil
 	}
 
 	updatedTask.UpdatedAt = time.Now()
