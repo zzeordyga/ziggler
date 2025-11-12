@@ -18,7 +18,7 @@ func main() {
 
 	database.SeedDatabase()
 
-	handlers.InitSocketIO()
+	handlers.InitWebSocket()
 
 	r := gin.Default()
 

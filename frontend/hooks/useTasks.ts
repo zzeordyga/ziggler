@@ -77,9 +77,12 @@ export const useUpdateTask = () => {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ taskId, updates }: { taskId: number; updates: Partial<Task> | { unassigned: boolean } }) =>
-      tasksAPI.update(taskId, updates),
+    mutationFn: ({ taskId, updates }: { taskId: number; updates: Partial<Task> | { unassigned: boolean } }) => {
+      console.log('useUpdateTask mutation called with:', { taskId, updates })
+      return tasksAPI.update(taskId, updates)
+    },
     onSuccess: (updatedTask) => {
+      console.log('Task update successful:', updatedTask)
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
       
       queryClient.setQueryData(taskKeys.detail(updatedTask.id), updatedTask)

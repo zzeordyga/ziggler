@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Task, User } from '@/types'
+import { Task } from '@/types'
 import { useUpdateTask, useDeleteTask, useTasks } from '@/hooks/useTasks'
 import { useUsers } from '@/hooks/useUsers'
 import { getStatusDisplayName } from '@/utils/tasks'
@@ -84,12 +84,13 @@ export default function TaskCard({ task }: TaskCardProps) {
     }
 
     const handleAssignUser = (userId: number | null) => {
+        const updates = userId === null
+            ? { unassigned: true }
+            : { assignee_id: userId }
+
         updateMutation.mutate({
             taskId: task.id,
-            updates: {
-                assignee_id: userId || undefined,
-                unassigned: userId === null,
-            }
+            updates
         })
         setShowAssignDropdown(false)
     }

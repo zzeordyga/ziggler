@@ -59,8 +59,7 @@ export const createWebSocketConnection = (token: string): WebSocket => {
   ws.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
-      console.log('WebSocket message:', data)
-      
+
       if (data.type === 'authenticated') {
         console.log('WebSocket authenticated:', data.payload)
       } else if (data.type === 'auth_error') {
@@ -182,7 +181,7 @@ export const tasksAPI = {
     }
   },
 
-  update: async (taskId: number, updates: Partial<Task> | { unassigned: boolean }): Promise<Task> => {
+  update: async (taskId: number, updates: Partial<Task> | { unassigned?: boolean }): Promise<Task> => {
     try {
       const response = await apiClient.put<Task>(`/tasks/${taskId}`, updates)
       return response.data

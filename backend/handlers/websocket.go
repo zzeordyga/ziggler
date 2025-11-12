@@ -3,7 +3,6 @@ package handlers
 import (
 	"log"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"ziggler_backend/auth"
@@ -28,7 +27,7 @@ type WSMessage struct {
 	Payload interface{} `json:"payload"`
 }
 
-func InitSocketIO() {
+func InitWebSocket() {
 	go handleBroadcast()
 	log.Printf("WebSocket server initialized")
 }
@@ -47,14 +46,6 @@ func handleBroadcast() {
 		}
 		clientsMu.Unlock()
 	}
-}
-
-func getUserRoom(userID int) string {
-	return "user_" + strconv.Itoa(userID)
-}
-
-func getTaskRoom(taskID string) string {
-	return "task_" + taskID
 }
 
 func WebSocketHandler(c *gin.Context) {
@@ -121,11 +112,11 @@ func WebSocketHandler(c *gin.Context) {
 	log.Printf("WebSocket client disconnected")
 }
 
-func SocketIOMiddleware() gin.HandlerFunc {
+func WebSocketMiddleware() gin.HandlerFunc {
 	return WebSocketHandler
 }
 
-func HandleSocketIO(c *gin.Context) {
+func HandleWebSocket(c *gin.Context) {
 	WebSocketHandler(c)
 }
 
