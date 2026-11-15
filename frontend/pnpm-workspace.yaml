@@ -1,0 +1,7 @@
+packages:
+  - "."
+
+# pnpm 11: allow these deps to run install scripts (native builds)
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
