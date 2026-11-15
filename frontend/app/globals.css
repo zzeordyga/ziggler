@@ -1,22 +1,26 @@
 @import "tailwindcss";
+@import "./tokens.css";
+
+/* Class-based dark mode (toggled + persisted, system-aware default) */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: var(--bg);
+  --foreground: var(--text);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
@@ -24,7 +28,7 @@ body {
 }
 
 .btn-primary {
-  @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+  @apply bg-brand hover:bg-brand-strong text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2;
 }
 
 .btn-secondary {
@@ -40,7 +44,7 @@ body {
 }
 
 .input-field {
-  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-300;
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand dark:bg-gray-700 dark:text-white dark:placeholder-gray-300;
 }
 
 .label {
@@ -61,6 +65,10 @@ body {
 
 .text-muted {
   @apply text-gray-600 dark:text-gray-400;
+}
+
+.eyebrow {
+  @apply text-xs font-medium uppercase tracking-wider text-gray-600 dark:text-gray-400;
 }
 
 .container-main {
@@ -87,6 +95,17 @@ body {
   @apply opacity-0 transition-opacity duration-200;
 }
 
+/* Reveal actions on touch devices and keyboard focus (not just hover) */
+@media (hover: none) {
+  .task-actions {
+    @apply opacity-100;
+  }
+}
+
+.task-card:focus-within .task-actions {
+  @apply opacity-100;
+}
+
 .task-status-todo {
   @apply bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200;
 }
@@ -108,7 +127,7 @@ body {
 }
 
 .stat-card {
-  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border p-6 text-center;
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center;
 }
 
 .stat-number {
@@ -117,4 +136,19 @@ body {
 
 .stat-label {
   @apply text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide;
+}
+
+/* Drag feedback: subtle lift while dragging with dnd-kit */
+.dragging {
+  @apply opacity-75 rotate-1 scale-[1.02] shadow-lg;
+}
+
+.drop-target {
+  @apply ring-2 ring-brand ring-offset-2 rounded-lg;
+}
+
+/* Keyboard accessibility */
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }

@@ -6,7 +6,7 @@ import (
 
 	"ziggler_backend/config"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -49,7 +49,7 @@ func ValidateToken(tokenString string) (*Claims, error) {
 			return nil, errors.New("invalid signing method")
 		}
 		return config.GetJWTSecret(), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"}))
 
 	if err != nil {
 		return nil, err
