@@ -1,0 +1,118 @@
+/* Revival Design System — canonical tokens. Do not edit copies individually;
+   re-sync from /Users/ziggy/Documents/Projects/.revival-design/tokens.css
+   design.tokens.source = revival-design@v1 */
+
+:root {
+  --radius-sm: 0.375rem;
+  --radius: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-full: 9999px;
+
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+  --space-8: 24px;
+  --space-10: 32px;
+  --space-12: 40px;
+  --space-14: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* Neutral surface scale */
+  --bg: oklch(0.99 0.005 240);
+  --surface: oklch(1 0 0);
+  --surface-2: oklch(0.98 0.006 240);
+  --border: oklch(0.90 0.01 240);
+  --text: oklch(0.22 0.02 255);
+  --text-muted: oklch(0.50 0.02 255);
+
+  /* Brand + accents */
+  --brand: oklch(0.62 0.17 165);
+  --brand-strong: oklch(0.50 0.16 165);
+  --accent: oklch(0.62 0.20 250);
+  --danger: oklch(0.60 0.21 25);
+  --success: oklch(0.62 0.17 150);
+  --ring: oklch(0.62 0.17 165 / 0.5);
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: oklch(0.16 0.02 250);
+  --surface: oklch(0.21 0.025 250);
+  --surface-2: oklch(0.25 0.03 250);
+  --border: oklch(0.32 0.03 255);
+  --text: oklch(0.96 0.01 240);
+  --text-muted: oklch(0.70 0.02 255);
+
+  --brand: oklch(0.70 0.16 165);
+  --brand-strong: oklch(0.74 0.16 165);
+  --accent: oklch(0.70 0.18 250);
+  --danger: oklch(0.68 0.20 25);
+  --success: oklch(0.70 0.16 150);
+  --ring: oklch(0.70 0.16 165 / 0.55);
+
+  color-scheme: dark;
+}
+
+/* Tailwind 4 mapping — `@import` this file in your app's main CSS, then
+   utilities like bg-brand / text-text / border-border / surface / surface-2
+   become available. Custom utilities below provide the surface scale + ring. */
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-ring: var(--ring);
+
+  --radius-sm: var(--radius-sm);
+  --radius: var(--radius);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; font-weight: 650; }
+  *:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .surface { background-color: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+  .surface-2 { background-color: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .eyebrow { font-size: var(--text-xs); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+    padding: .625rem 1rem; border-radius: var(--radius); font-weight: 550;
+    border: 1px solid transparent; transition: filter .15s, background-color .15s;
+  }
+  .btn-brand { background-color: var(--brand); color: white; }
+  .btn-brand:hover { background-color: var(--brand-strong); }
+  .btn-ghost { background-color: transparent; border-color: var(--border); color: var(--text); }
+  .btn-ghost:hover { background-color: var(--surface-2); }
+}

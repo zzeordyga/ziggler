@@ -6,6 +6,7 @@ import (
 
 	"ziggler_backend/auth"
 	"ziggler_backend/config"
+	"ziggler_backend/database"
 
 	"github.com/gin-gonic/gin"
 )
@@ -55,6 +56,14 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		claims, err := auth.ValidateToken(tokenString)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.Abort()
+			return
+		}
+
+		// Verify the user still exists (revocation-by-deletion semantics).
+		var count int64
+		if err := database.DB.Model(&database.User{}).Where("id = ?", claims.UserID).Count(&count).Error; err != nil || count == 0 {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User no longer exists"})
 			c.Abort()
 			return
 		}

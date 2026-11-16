@@ -164,7 +164,7 @@ export default function TaskCard({ task }: TaskCardProps) {
                 ...style,
                 zIndex: showAssignDropdown ? 1000 : 'auto'
             }}
-            className={`task-card hover:shadow-lg transition-all duration-200 group relative ${isDragging ? 'opacity-50 scale-95' : ''}`}
+            className={`task-card hover:shadow-lg transition-all duration-200 group relative ${isDragging ? 'dragging' : ''}`}
             {...attributes}
         >
             <div

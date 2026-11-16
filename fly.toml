@@ -1,0 +1,26 @@
+# fly.toml — ziggler (backend + frontend via docker-compose.prod.yml / nginx)
+app = "ziggler"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.prod"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+
+# Persistent volume for the SQLite database so tasks survive redeploys.
+# (For Postgres instead: set DB_DRIVER=postgres + DATABASE_URL, drop this mount.)
+# Create once with: fly volumes create ziggler_data --size 1
+[[mounts]]
+  source = "ziggler_data"
+  destination = "/data"
+
+[env]
+  APP_ENV = "production"
+  GIN_MODE = "release"
+  DB_DRIVER = "sqlite"
+  DB_PATH = "/data/ziggler.db"

@@ -21,6 +21,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import TaskCard from '@/components/TaskCard'
 import SearchFilter from '@/components/SearchFilter'
 import WebSocketStatus from '@/components/WebSocketStatus'
+import ThemeToggle from '@/components/ThemeToggle'
 
 const STATUS_COLUMNS: StatusColumns = TASK_STATUSES.reduce((acc, status) => {
     acc[status] = {
@@ -382,6 +383,7 @@ export default function DashboardPage() {
                             >
                                 📊 Statistics
                             </a>
+                            <ThemeToggle />
                             <button
                                 onClick={handleLogout}
                                 className="btn-secondary"

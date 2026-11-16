@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useStats } from '@/hooks/useTasks'
 import { UserStats } from '@/types'
+import ThemeToggle from '@/components/ThemeToggle'
 
 export default function StatsPage() {
     const [selectedUserId, setSelectedUserId] = useState<number | undefined>(undefined)
@@ -55,6 +56,7 @@ export default function StatsPage() {
                             >
                                 ← Back to Dashboard
                             </a>
+                            <ThemeToggle />
                             <select
                                 value={selectedUserId || ''}
                                 onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : undefined)}
