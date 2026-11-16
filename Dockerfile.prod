@@ -7,7 +7,7 @@ COPY backend/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/ziggler .
 
 # ---------- frontend build ----------
-FROM node:22-alpine AS frontend
+FROM node:26-alpine AS frontend
 WORKDIR /app
 RUN npm install -g pnpm@11.18.0
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
@@ -17,7 +17,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
 # ---------- runtime ----------
-FROM node:22-alpine
+FROM node:26-alpine
 RUN apk add --no-cache nginx wget
 
 # Backend
